@@ -25,82 +25,76 @@
 
 package io.ryoung.heatmap;
 
-import com.google.common.cache.Cache;
-import com.google.common.cache.CacheBuilder;
-import com.google.inject.Inject;
-import io.ryoung.heatmap.HeatmapPlugin.HEATMAP_MODE;
 import java.awt.Color;
 import java.awt.Graphics2D;
 import java.awt.Rectangle;
 import java.awt.image.BufferedImage;
 import java.util.concurrent.TimeUnit;
+
+import com.google.common.cache.Cache;
+import com.google.common.cache.CacheBuilder;
+import com.google.inject.Inject;
+
 import lombok.Getter;
 import net.runelite.api.ItemComposition;
-import net.runelite.api.widgets.WidgetInfo;
 import net.runelite.api.widgets.WidgetItem;
 import net.runelite.client.game.ItemManager;
 import net.runelite.client.ui.overlay.WidgetItemOverlay;
 import net.runelite.client.util.ImageUtil;
 
-public class HeatmapItemOverlay extends WidgetItemOverlay
-{
-	private static final int ALPHA = 135;
-	private static final int COLOR_BOUNDARY = 240;
+public class HeatmapItemOverlay extends WidgetItemOverlay {
+    private static final int ALPHA = 135;
+    private static final int COLOR_BOUNDARY = 240;
 
-	private final HeatmapPlugin plugin;
-	private final ItemManager itemManager;
+    private final HeatmapPlugin plugin;
+    private final ItemManager itemManager;
 
-	@Getter
-	private final Cache<Integer, BufferedImage> heatmapImages = CacheBuilder.newBuilder()
-		.maximumSize(160)
-		.expireAfterWrite(2, TimeUnit.MINUTES)
-		.build();
+    @Getter
+    private final Cache<Integer, BufferedImage> heatmapImages = CacheBuilder.newBuilder()
+            .maximumSize(160)
+            .expireAfterWrite(2, TimeUnit.MINUTES)
+            .build();
 
-	@Inject
-	HeatmapItemOverlay(HeatmapPlugin plugin, ItemManager itemManager)
-	{
-		this.plugin = plugin;
-		this.itemManager = itemManager;
-		showOnBank();
-	}
+    @Inject HeatmapItemOverlay(HeatmapPlugin plugin, ItemManager itemManager) {
+        this.plugin = plugin;
+        this.itemManager = itemManager;
+        showOnBank();
+    }
 
-	@Override
-	public void renderItemOverlay(Graphics2D graphics, int itemId, WidgetItem itemWidget)
-	{
-		HeatmapItem hItem = plugin.getHeatmapItem(itemId);
-		HEATMAP_MODE mode = plugin.getHeatmapMode();
-		if (hItem == null || itemWidget.getWidget().getParentId() != WidgetInfo.BANK_ITEM_CONTAINER.getId()
-			|| mode == HEATMAP_MODE.NULL
-			|| (mode == HEATMAP_MODE.GE && hItem.getGePrice() < 1) || (mode == HEATMAP_MODE.HA && hItem.getAlchPrice() < 1))
-		{
-			return;
-		}
+    @Override
+    public void renderItemOverlay(Graphics2D graphics, int itemId, WidgetItem itemWidget) {
+        HeatmapItem hItem = plugin.getHeatmapItem(itemId);
+        HeatmapMode mode = plugin.getHeatmapMode();
+        //		if (hItem == null || itemWidget.getWidget().getParentId() != WidgetInfo.BANK_ITEM_CONTAINER.getId()
+        //			|| mode == HeatmapMode.NULL
+        //			|| (mode == HeatmapMode.GE && hItem.getGePrice() < 1) || (mode == HeatmapMode.HA && hItem.getAlchPrice() < 1))
+        //		{
+        //			return;
+        //		}
 
-		Rectangle bounds = itemWidget.getCanvasBounds();
-		BufferedImage image = heatmapImages.getIfPresent(itemId);
-		if (image == null)
-		{
-			image = getImage(hItem, mode);
-			heatmapImages.put(itemId, image);
-		}
+        Rectangle bounds = itemWidget.getCanvasBounds();
+        BufferedImage image = heatmapImages.getIfPresent(itemId);
+        if (image == null) {
+            image = getImage(hItem, HeatmapMode.GE);
+            heatmapImages.put(itemId, image);
+        }
 
-		graphics.drawImage(image, bounds.x, bounds.y, null);
-	}
+        graphics.drawImage(image, bounds.x, bounds.y, null);
+    }
 
-	private static Color getColor(float value)
-	{
-		float h = (1 - value) * COLOR_BOUNDARY / 360;
-		Color c = Color.getHSBColor(h, 1, 1f);
+    private static Color getColor(float value) {
+        float h = (1 - value) * COLOR_BOUNDARY / 360;
+        Color c = Color.getHSBColor(h, 1, 1f);
 
-		return new Color(c.getRed(), c.getGreen(), c.getBlue(), ALPHA);
-	}
+        return new Color(c.getRed(), c.getGreen(), c.getBlue(), ALPHA);
+    }
 
-	private BufferedImage getImage(HeatmapItem item, HEATMAP_MODE mode)
-	{
-		ItemComposition itemComposition = itemManager.getItemComposition(item.getId());
-		boolean stackable = item.getQuantity() > 1 || itemComposition.isStackable();
-		BufferedImage image = itemManager.getImage(item.getId(), item.getQuantity(), stackable);
-		Color color = getColor(mode == HEATMAP_MODE.GE ? item.getGeFactor() : item.getAlchFactor());
-		return ImageUtil.fillImage(image, color);
-	}
+    private BufferedImage getImage(HeatmapItem item, HeatmapMode mode) {
+        ItemComposition itemComposition = itemManager.getItemComposition(item.getId());
+        boolean stackable = item.getQuantity() > 1 || itemComposition.isStackable();
+        BufferedImage image = itemManager.getImage(item.getId(), item.getQuantity(), stackable);
+        Color color = getColor(mode == HeatmapMode.GE ? item.getGeFactor() : item.getAlchFactor());
+        return ImageUtil.fillImage(image, color);
+    }
+
 }

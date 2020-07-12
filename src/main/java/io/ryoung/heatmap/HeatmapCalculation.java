@@ -27,91 +27,127 @@ package io.ryoung.heatmap;
 
 import java.util.HashMap;
 import java.util.Map;
+
 import javax.inject.Inject;
+
 import lombok.Getter;
 import net.runelite.api.Constants;
 import net.runelite.api.Item;
 import net.runelite.api.ItemID;
 import net.runelite.client.game.ItemManager;
 
-public class HeatmapCalculation
-{
-	private final ItemManager itemManager;
+public class HeatmapCalculation {
+    enum TYPE {
+        NORMAL,
+        LOG
+    }
 
-	@Getter
-	private final Map<Integer, HeatmapItem> heatmapItems = new HashMap<>();
+    private final ItemManager itemManager;
 
-	@Inject
-	private HeatmapCalculation(ItemManager itemManager)
-	{
-		this.itemManager = itemManager;
+    @Getter
+    private final Map<Integer, HeatmapItem> heatmapItems = new HashMap<>();
+
+    @Inject
+    private HeatmapCalculation(ItemManager itemManager) {
+        this.itemManager = itemManager;
+    }
+
+    void calculate(Item[] items) {
+        heatmapItems.clear();
+        getValueItems(items);
+        normalizeItems();
+    }
+
+    void calculateLog(Item[] items) {
+        heatmapItems.clear();
+        getValueItems(items);
+        normalizeItemsLog();
+    }
+
+    private void getValueItems(Item[] items) {
+        for (final Item item : items) {
+            final int qty = item.getQuantity();
+            final int id = item.getId();
+
+            final HeatmapItem hItem = new HeatmapItem();
+            hItem.setId(id);
+            hItem.setQuantity(qty);
+            heatmapItems.put(item.getId(), hItem);
+
+            if (id <= 0 || qty == 0) {
+                continue;
+            }
+
+            switch (id) {
+                case ItemID.COINS_995:
+                    hItem.setAlchPrice(qty);
+                    hItem.setGePrice(qty);
+                    break;
+                case ItemID.PLATINUM_TOKEN:
+                    hItem.setGePrice(qty * 1000L);
+                    hItem.setAlchPrice(qty * 1000L);
+                    break;
+                default:
+                    final long storePrice = itemManager.getItemComposition(id).getPrice();
+                    final long alchPrice = (long) (storePrice * Constants.HIGH_ALCHEMY_MULTIPLIER);
+
+                    hItem.setGePrice(itemManager.getItemPrice(id) * qty);
+                    hItem.setAlchPrice(alchPrice * qty);
+                    break;
+            }
+        }
+    }
+
+    void calculate(Item[] items, HeatmapCalculation.TYPE calculationType) {
+		if (calculationType == TYPE.NORMAL) {
+			calculate(items);
+		} else {
+		    calculateLog(items);
+        }
 	}
 
-	void calculate(Item[] items)
-	{
-		heatmapItems.clear();
+    private void normalizeItems() {
+        long minAlch = Long.MAX_VALUE, minGe = Long.MAX_VALUE;
+        long maxAlch = Long.MIN_VALUE, maxGe = Long.MIN_VALUE;
 
-		for (final Item item : items)
-		{
-			final int qty = item.getQuantity();
-			final int id = item.getId();
+        for (HeatmapItem hItem : heatmapItems.values()) {
+            minGe = Math.min(minGe, hItem.getGePrice());
+            minAlch = Math.min(minAlch, hItem.getAlchPrice());
 
-			final HeatmapItem hItem = new HeatmapItem();
-			hItem.setId(id);
-			hItem.setQuantity(qty);
-			heatmapItems.put(item.getId(), hItem);
+            maxGe = Math.max(maxGe, hItem.getGePrice());
+            maxAlch = Math.max(maxAlch, hItem.getAlchPrice());
+        }
 
-			if (id <= 0 || qty == 0)
-			{
-				continue;
-			}
+        for (HeatmapItem hItem : heatmapItems.values()) {
+            hItem.setAlchFactor(normalize(minAlch, maxAlch, hItem.getAlchPrice()));
+            hItem.setGeFactor(normalize(minGe, maxGe, hItem.getGePrice()));
+        }
+    }
 
-			switch (id)
-			{
-				case ItemID.COINS_995:
-					hItem.setAlchPrice(qty);
-					hItem.setGePrice(qty);
-					break;
-				case ItemID.PLATINUM_TOKEN:
-					hItem.setGePrice(qty * 1000L);
-					hItem.setAlchPrice(qty * 1000L);
-					break;
-				default:
-					final long storePrice = itemManager.getItemComposition(id).getPrice();
-					final long alchPrice = (long) (storePrice * Constants.HIGH_ALCHEMY_MULTIPLIER);
+    private void normalizeItemsLog() {
+        long minAlch = Long.MAX_VALUE, minGe = Long.MAX_VALUE;
+        long maxAlch = Long.MIN_VALUE, maxGe = Long.MIN_VALUE;
 
-					hItem.setGePrice(itemManager.getItemPrice(id) * qty);
-					hItem.setAlchPrice(alchPrice * qty);
-					break;
-			}
-		}
+        for (HeatmapItem hItem : heatmapItems.values()) {
+            minGe = Math.min(minGe, getLogValue(hItem.getGePrice()));
+            minAlch = Math.min(minAlch, getLogValue(hItem.getAlchPrice()));
 
-		normalizeItems();
-	}
+            maxGe = Math.max(maxGe, getLogValue(hItem.getGePrice()));
+            maxAlch = Math.max(maxAlch, getLogValue(hItem.getAlchPrice()));
+        }
 
-	private void normalizeItems()
-	{
-		long minAlch = Long.MAX_VALUE, minGe = Long.MAX_VALUE;
-		long maxAlch = Long.MIN_VALUE, maxGe = Long.MIN_VALUE;
+        for (HeatmapItem hItem : heatmapItems.values()) {
+            hItem.setAlchFactor(normalize(minAlch, maxAlch, getLogValue(hItem.getAlchPrice())));
+            hItem.setGeFactor(normalize(minGe, maxGe, getLogValue(hItem.getGePrice())));
+        }
+    }
 
-		for (HeatmapItem hItem : heatmapItems.values())
-		{
-			minGe = Math.min(minGe, hItem.getGePrice());
-			minAlch = Math.min(minAlch, hItem.getAlchPrice());
+    private long getLogValue(long value) {
+        return (long) Math.floor(Math.log1p(value + 1));
+    }
 
-			maxGe = Math.max(maxGe, hItem.getGePrice());
-			maxAlch = Math.max(maxAlch, hItem.getAlchPrice());
-		}
+    private float normalize(long min, long max, long price) {
+        return 1 * ((float) (price - min) / (max - min)) + 0;
+    }
 
-		for (HeatmapItem hItem : heatmapItems.values())
-		{
-			hItem.setAlchFactor(normalize(0, 1, minAlch, maxAlch, hItem.getAlchPrice()));
-			hItem.setGeFactor(normalize(0, 1, minGe, maxGe, hItem.getGePrice()));
-		}
-	}
-
-	private static float normalize(int a, int b, long min, long max, long x)
-	{
-		return (b - a) * ((float) (x - min) / (max - min)) + a;
-	}
 }
