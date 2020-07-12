@@ -143,7 +143,7 @@ public class HeatmapCalculation {
     }
 
     private long getLogValue(long value) {
-        return (long) Math.floor(Math.log(value + 20_000_000));
+        return (long) Math.floor(Math.log(value + 4_000_000));
     }
 
     private float normalize(long min, long max, long price) {
